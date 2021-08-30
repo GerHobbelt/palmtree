@@ -1583,7 +1583,7 @@ namespace palmtree {
 
       // Mark the tree as destroyed
       destroyed_ = true;
-      // Join all workter thread
+      // Join all worker thread
       for (auto &wthread : workers_)
         wthread.wthread_.join();
       // Free atomic layer width
