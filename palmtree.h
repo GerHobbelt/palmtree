@@ -18,12 +18,21 @@
 // #include "smmintrin.h"
 #include "CycleTimer.h"
 #include "barrier.h"
+
+#ifdef HAVE_JEMALLOC_H
 #include <jemalloc/jemalloc.h>
+#endif
+
 
 using std::cout;
 using std::endl;
 
+#if defined(__GNUC__) && ((__GNUC__ >= 3) || \
+  ((__GNUC__ == 2) && defined(__GNUC_MINOR__) && (__GNUC_MINOR__ >= 7)))
 #define UNUSED __attribute__((unused))
+#else
+#define UNUSED /* empty */
+#endif
 
 #define PROFILE
 

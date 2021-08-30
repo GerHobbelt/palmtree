@@ -2,12 +2,19 @@
 // Created by Zrs_y on 5/4/16.
 //
 #include <iostream>
+#ifdef HAVE_STX_BTREE_MAP_H
 #include <stx/btree_map.h>
+#endif
+#ifdef HAVE_TLX_CONTAINER_BTREE_MAP_HPP
+#include <tlx/container/btree_map.hpp>
+#endif
 #include <glog/logging.h>
 #include <iostream>
 #include <cstdlib>
 #include <time.h>
+#ifdef HAVE_UNISTD_H
 #include <unistd.h>
+#endif
 #include "../CycleTimer.h"
 
 class fast_random {

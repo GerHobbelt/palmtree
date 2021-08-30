@@ -9,11 +9,27 @@
 #include <glog/logging.h>
 #include <map>
 #include <time.h>
+#ifdef HAVE_UNISTD_H
 #include <unistd.h>
+#endif
+
+#ifdef HAVE_JEMALLOC_H
 #include <jemalloc/jemalloc.h>
+#endif
+
+#ifdef HAVE_STX_BTREE_MAP_H
 #include <stx/btree_map.h>
+#endif
+#ifdef HAVE_TLX_CONTAINER_BTREE_MAP_HPP
+#include <tlx/container/btree_map.hpp>
+#endif
+
 #include <pthread.h>
 #include "CycleTimer.h"
+
+#undef min
+#undef max
+
 
 using namespace std;
 
@@ -281,6 +297,7 @@ void readonly_skew(size_t entry_count, size_t op_count, float contention_ratio, 
 
     threads.clear();
 
+#ifdef HAVE_STX_BTREE_MAP_H
     // stx
     LOG(INFO) << "Running stx map";
     
@@ -314,7 +331,46 @@ void readonly_skew(size_t entry_count, size_t op_count, float contention_ratio, 
     LOG(INFO) << "stx map run for " << end-start << "s, " << "thput:" << std::fixed << op_count/(end-start)/1000 << " K rps";
 
     runtime_ref = end-start;
-    LOG(INFO) << "SPEEDUP over PalmTree: " << runtime_ref / runtime << " X";
+	  LOG(INFO) << "STX SPEEDUP over PalmTree: " << runtime_ref / runtime << " X";
+#endif
+
+#ifdef HAVE_TLX_CONTAINER_BTREE_MAP_HPP
+	  // tlx (successor of stx)
+	  LOG(INFO) << "Running tlx map";
+
+	  tlx::btree_map<int, int> tlx_map;
+	  for (size_t i = 0; i < entry_count; i++)
+		  tlx_map.insert(std::make_pair(i, i));
+
+	  start = CycleTimer::currentSeconds();
+	  auto tlx_p = &tlx_map;
+	  for (int i = 0; i < w_n; i++) {
+		  threads.push_back(std::thread([tlx_p, op_count, entry_count, l, w_n, contention_ratio]() {
+			  fast_random rng(time(0));
+			  for (size_t i = 0; i < op_count / w_n; i++) {
+				  int rand_key = rng.next_u32() % entry_count;
+				  auto id = rng.next_uniform();
+				  if (id < contention_ratio) {
+					  rand_key = (int)(rand_key * 0.2);
+				  }
+				  pthread_rwlock_rdlock(l);
+				  tlx_p->find(rand_key);
+				  pthread_rwlock_unlock(l);
+			  }
+			  }));
+	  }
+
+	  for (auto& t : threads) {
+		  t.join();
+	  }
+
+	  end = CycleTimer::currentSeconds();
+	  LOG(INFO) << "tlx map run for " << end - start << "s, " << "thput:" << std::fixed << op_count / (end - start) / 1000 << " K rps";
+
+	  runtime_ref = end - start;
+	  LOG(INFO) << "TLX SPEEDUP over PalmTree: " << runtime_ref / runtime << " X";
+  }
+#endif
   }
 }
 
@@ -435,6 +491,7 @@ void update_skew(size_t entry_count, size_t op_count, float contention_ratio, bo
     double runtime_ref = end-start;
     LOG(INFO) << "SPEEDUP over PalmTree: " << runtime_ref / runtime << " X";
 
+#ifdef HAVE_STX_BTREE_MAP_H
     // stx
     LOG(INFO) << "Running stx map";
     stx::btree_map<int, int> stx_map;
@@ -481,8 +538,60 @@ void update_skew(size_t entry_count, size_t op_count, float contention_ratio, bo
     LOG(INFO) << "stx map run for " << end-start << "s, " << "thput:" << std::fixed << op_count/(end-start)/1000 << " K rps";
 
     runtime_ref = end-start;
-    LOG(INFO) << "SPEEDUP over PalmTree: " << runtime_ref / runtime << " X";
+    LOG(INFO) << "STX SPEEDUP over PalmTree: " << runtime_ref / runtime << " X";
+#endif
 
+#ifdef HAVE_TLX_CONTAINER_BTREE_MAP_HPP
+	// tlx (successor of stx)
+	LOG(INFO) << "Running tlx map";
+	tlx::btree_map<int, int> tlx_map;
+	for (size_t i = 0; i < entry_count; i++)
+		tlx_map.insert(std::make_pair(i, i));
+
+	start = CycleTimer::currentSeconds();
+	auto tlx_p = &tlx_map;
+	for (int i = 0; i < w_n; i++) {
+		threads.push_back(std::thread([tlx_p, op_count, entry_count, l, w_n, contention_ratio]() {
+			fast_random rng(time(0));
+			auto stx = *tlx_p;
+			for (size_t i = 0; i < op_count / w_n; i++) {
+				int k = rng.next_u32() % entry_count;
+				auto id = rng.next_uniform();
+
+				auto rand_key = k;
+				if (id < contention_ratio) {
+					rand_key = (int)rand_key * 0.2;
+				}
+
+				id = rng.next_uniform();
+				if (id < 0.1) {
+					pthread_rwlock_wrlock(l);
+					stx.insert(rand_key, rand_key);
+				}
+				else if (id < 0.2) {
+					pthread_rwlock_wrlock(l);
+					stx.erase(rand_key);
+				}
+				else {
+					pthread_rwlock_rdlock(l);
+					stx.find(rand_key);
+				}
+
+				pthread_rwlock_unlock(l);
+			}
+			}));
+	}
+
+	for (auto& t : threads) {
+		t.join();
+	}
+
+	end = CycleTimer::currentSeconds();
+	LOG(INFO) << "tlx map run for " << end - start << "s, " << "thput:" << std::fixed << op_count / (end - start) / 1000 << " K rps";
+
+	runtime_ref = end - start;
+	LOG(INFO) << "TLX SPEEDUP over PalmTree: " << runtime_ref / runtime << " X";
+#endif
   }
 }
 
