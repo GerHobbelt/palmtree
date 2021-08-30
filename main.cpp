@@ -174,6 +174,7 @@ void bench() {
 
 // Populate a palm tree with @entry_count entries
 void populate_palm_tree(palmtree::PalmTree<int, int> *palmtreep, size_t entry_count) {
+  LOG(INFO) << "Begin populate palm tree with " << entry_count << " entries";
   int *buff = new int[entry_count];
   for(size_t i = 0; i < entry_count; i++) {
     buff[i] = i;
@@ -181,6 +182,7 @@ void populate_palm_tree(palmtree::PalmTree<int, int> *palmtreep, size_t entry_co
 
   std::random_shuffle(buff, buff + entry_count);
 
+  double bt = CycleTimer::currentSeconds();
   for(size_t j = 0; j < entry_count; j++) {
     // auto kv = buff[j];
     palmtreep->insert(2 * j, 2 * j);
@@ -190,8 +192,10 @@ void populate_palm_tree(palmtree::PalmTree<int, int> *palmtreep, size_t entry_co
 
   // Wait for task finished
   palmtreep->wait_finish();
+  double passed = CycleTimer::currentSeconds() - bt;
+  double thput = entry_count / passed / 1024;
+  LOG(INFO) << "Populated " << entry_count << " keys in " << passed << " secs, thruput: " << thput;
 }
-
 
 void readonly_skew(size_t entry_count, size_t op_count, float contention_ratio, bool run_std_map = false) {
   LOG(INFO) << "Begin palmtree readonly skew benchmark, contention ratio: " << contention_ratio;
@@ -280,6 +284,7 @@ void readonly_skew(size_t entry_count, size_t op_count, float contention_ratio, 
 
     // stx
     LOG(INFO) << "Running stx map";
+    
     stx::btree_map<int, int> stx_map;
     for (size_t i = 0; i < entry_count; i++)
       stx_map.insert(std::make_pair(i, i));
@@ -482,6 +487,70 @@ void update_skew(size_t entry_count, size_t op_count, float contention_ratio, bo
   }
 }
 
+void run_insert_bench(size_t entry_count) {
+  LOG(INFO) << "Begin palmtree insert benchmark, inserting " << entry_count << " entries";
+
+  palmtree::PalmTree<int, int> *palmtreep = new palmtree::PalmTree<int, int> (std::numeric_limits<int>::min(), worker_num);
+
+  fast_random rng(time(0));
+  int batch_size = palmtreep->batch_size();
+  int step = 5000;
+
+  int num_batch = entry_count / batch_size;
+  int residue = entry_count % batch_size;
+
+  unsigned start = 0;
+
+  auto bt = CycleTimer::currentSeconds();
+  for (int i = 0; i < num_batch; i++) {
+    start = 0;
+    for (int j = 0; j < batch_size; j++) {
+      start += rng.next_u32() % step;
+      palmtreep->insert(start, start);  
+    }
+  }
+
+  start = 0;
+  for (int i = 0; i < residue; i++) {
+    start += rng.next_u32() % 32; 
+    palmtreep->insert(start, start);
+  }
+
+  palmtreep->wait_finish();
+  auto passed = CycleTimer::currentSeconds() - bt;
+  LOG(INFO) << "Finished after " << passed << " ms, thput: " << entry_count / passed / 1000 << " K/s";
+
+  delete palmtreep;
+
+
+  LOG(INFO) << "Begin STX BTree insert benchmark, inserting " << entry_count << " entries";
+  stx::btree_map<int, int> stx_map;
+  bt = CycleTimer::currentSeconds();
+  auto stx_p = &stx_map;
+  int w_n = worker_num;
+
+  std::vector<std::thread> threads;
+  for(int i = 0; i < w_n; i++) {
+    threads.push_back(std::thread([stx_p, entry_count, w_n]() {
+      fast_random rng(time(0));
+      for (size_t i = 0; i < entry_count / w_n; i++) {
+        int rand_key = rng.next_u32() % (entry_count * 32);
+        lock.lock();
+        stx_p->insert(rand_key, rand_key);
+        lock.unlock();
+      }
+    }));
+  }
+
+  for (auto &thread : threads) {
+    thread.join();
+  }
+  passed = CycleTimer::currentSeconds() - bt;
+  LOG(INFO) << "Finished after " << passed << " ms, thput: " << entry_count / passed / 1000 << " K/s";
+
+
+}
+
 
 int main(int argc, char *argv[]) {
   // Google logging
@@ -503,20 +572,33 @@ int main(int argc, char *argv[]) {
     c = false;
   }
 
-  bool r;
+  bool r = false;
+  bool i = false;
   if(strcmp(argv[3], "r") == 0) {
     r = true;
   }else{
     r = false;
   }
 
+  if (strcmp(argv[3], "i") == 0) {
+    i = true;
+  } else {
+    i = false;
+  }
+
+  if (i) {
+    auto insert = 1024 * 512 * 10;
+    run_insert_bench(insert);
+    return 0;
+  }
+
   float contention_ratio;
 
   contention_ratio = atof(argv[4]);
 
-
   auto insert = 1024 * 512 * 10;
   auto op_num = 1024 * 1024 * 10;
+  // readonly_uniform(insert, op_num, c);
   if(r) {
     readonly_skew(insert, op_num, contention_ratio, c);
   }else {
