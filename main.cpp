@@ -15,7 +15,6 @@
 #include <pthread.h>
 #include "CycleTimer.h"
 
-#define TEST_SIZE 10240000
 using namespace std;
 
 int worker_num;

@@ -1654,6 +1654,10 @@ namespace palmtree {
       return BATCH_SIZE_PER_WORKER * NUM_WORKER;
     }
 
+    void print_stat() {
+      STAT.print_stat();
+    }
+
     // Wait until all task finished
     void wait_finish() {
       if (tree_current_batch_->size() != 0) {
