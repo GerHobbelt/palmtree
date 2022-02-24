@@ -178,7 +178,7 @@ void bench() {
   for (auto &thread : threads)
     thread.join();
 
-  delete buff;
+  delete[] buff;
   LOG(INFO) << "task_nums: " << palmtree.task_nums;
   while(palmtree.task_nums > 0)
     ;
@@ -203,7 +203,7 @@ void populate_palm_tree(palmtree::PalmTree<int, int> *palmtreep, size_t entry_co
     palmtreep->insert(2 * j, 2 * j);
   }
 
-  delete buff;
+  delete[] buff;
 
   // Wait for task finished
   palmtreep->wait_finish();
