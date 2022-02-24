@@ -146,7 +146,7 @@
               *MHz_str = '\0';
               if (1 == sscanf(after_at, "%f", &MHz)) {
                 //printf("MHz = %f\n", MHz);
-                secondsPerTick_val = 1e-6f / GHz;
+                secondsPerTick_val = 1e-6f / MHz;
                 break;
               }
             }
