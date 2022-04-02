@@ -4,6 +4,7 @@
 #include <thread>
 #include "fineTree.h"
 #include "../CycleTimer.h"
+
 using namespace std;
 
 class fast_random {
