@@ -12,7 +12,11 @@
 #include <atomic>
 #include "immintrin.h"
 
+#if defined(_MSC_VER)
+#define UNUSED /**/
+#else
 #define UNUSED __attribute__((unused))
+#endif
 
 enum NodeType {
   INNERNODE = 0,
